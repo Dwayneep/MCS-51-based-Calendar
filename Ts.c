@@ -19,7 +19,7 @@ uchar K3_flag = 0;
 uchar K4_flag = 0;
 uint set=0;//按键设置
 
-//**********************Dwyane Xue   2023-01-05**********************
+//**********************Dwyane   2023-01-05**********************
 
 void display_Date_Week();
 void display_TIME();
@@ -39,12 +39,6 @@ void setpositions();//cursor location
 void timeacc();//seconds calculation by interrupt
 
 void main(){
-    //课设测试用例
-    //second=61,minute=61,hour=25,date=32,month=13,year=2021;     //2021-13-32 25:61:61
-    //second=55,minute=59,hour=23,date=29,month=2,year=2023;      //2023-02-29 23:59:55
-    //second=55,minute=59,hour=23,date=29,month=2,year=2024;      //2024-02-29 23:59:55
-    //second=55,minute=59,hour=23,date=29,month=2,year=1900;      //1900-02-29 23:59:55
-    //second=55,minute=59,hour=23,date=29,month=2,year=2000;      //2000-02-29 23:59:55
     init();
     clear();
     EA=1;
@@ -133,7 +127,7 @@ void adjust_date(){
           }
     }
   }//平年判断
-}//!!! month-1
+}//!! month-1
 
 void display_TIME(){
   Command(0x80+0x40+1);//换行
@@ -163,7 +157,7 @@ void display_Date_Week(){
   showSingleChar('0'+date/10);//d
 	showSingleChar('0'+date%10);
   showSingleChar(' ');//缩进
-  //星期判断***基姆拉尔森计算公式
+  //星期判断 基姆拉尔森计算公式
 
   if (month < 3) {
         tempM = month + 12;
@@ -188,13 +182,13 @@ void delayLong(){
 }
 
 void Command(uchar com){
-	P0=com;	  //com为输入的命令码。通过P2送给LCD
+	P0=com;	  //com输入命令码 通过P2送给LCD
 	RS=0;      //RS=0 写命令
   RW=0;
 	delayShort();	  
-	E=1;      //LCD的使能端E置高电平
+	E=1;      //LCD使能端E 高电平
 	delayShort();
-	E=0;       //LCD的使能端E置低电平
+	E=0;       //LCD使能端E 低电平
 }
 
 void showSingleChar(uchar ch){
@@ -286,23 +280,13 @@ void pressK2(){
 }//switch语句选择
 
 
-/*void pressK3(){
-  uint temp = 0xff;
-  while(--temp){
-    //if(K3==0) break;
-    if(K1 == 0) pressK1();
-  }
-  K3 = ~K3 ;
-}*/
-//uint max1 = 0xffff,max2 = 0xffff;
-
 void pressK3(){
   set = 0;
   setpositions();
   //秒针停止，光标闪烁                                                      
 
   while(1){
-    delayLong();//不加就执行不下去 debug
+    delayLong();
     if(K3_flag != 0 ) K3_flag &= K3;
     //showSingleChar('0'+K3_flag);
 
@@ -326,8 +310,7 @@ void pressK3(){
 
 void pressK4(){                
   uint op=0;
-  //uint a=2,b=4682;
-  uint a=2586,b=4682;
+  uint a=2586,b=4682;//预定义需要逻辑运算的操作数
   uchar store[3]={'&','|',' ^'};
   uint temp,result,bas;
   result = ((a & b | year) & (month & second ) & minute & (hour & date)); 
