@@ -1,0 +1,430 @@
+C51 COMPILER V7.10   TS                                                                    01/06/2023 13:01:41 PAGE 1   
+
+
+C51 COMPILER V7.10, COMPILATION OF MODULE TS
+OBJECT MODULE PLACED IN Ts.OBJ
+COMPILER INVOKED BY: C:\Keil\C51\BIN\C51.EXE Ts.c BROWSE DEBUG OBJECTEXTEND
+
+line level    source
+
+   1          #include "reg51.h"
+   2          typedef unsigned char uchar;
+   3          typedef unsigned int uint;
+   4          sbit E=P2^7;
+   5          sbit RS=P2^6;
+   6          sbit RW=P2^5;
+   7          sbit K1=P3^1;
+   8          sbit K2=P3^0;
+   9          sbit K3=P3^2;
+  10          sbit K4=P3^3;
+  11          uchar secjmpflag=0;//+1S
+  12          uint second=50,minute=59,hour=11;
+  13          uint date=6,month=1,year=2023;
+  14          uint MonthVEC[12] = {31,31,28,31,30,31,30,31,31,30,31,30};//平年 12-1-2-..-11    %12 鲁棒性
+  15          uint S_MonthVEC[12] = {31,31,29,31,30,31,30,31,31,30,31,30};//闰年 12-1-2-..-11
+  16          uchar code WeekMod[7][3] = {"Mon","Tue","Wed","Thr","Fri","Sat","Sun"};
+  17          uint cur_location[6] = {0x84,0x87,0x8A,0x80+0x40+2,0x80+0x40+5,0x80+0x40+8};//cursor location
+  18          uchar K3_flag = 0;
+  19          uchar K4_flag = 0;
+  20          uint set=0;//按键设置
+  21          
+  22          //**********************Dwyane Xue   2023-01-05**********************
+  23          
+  24          void display_Date_Week();
+  25          void display_TIME();
+  26          void adjust_time();
+  27          void adjust_date();//called by prev
+  28          void pressK1();//change cursor position
+  29          void pressK2();//adjust time
+  30          void pressK3();
+  31          void pressK4();
+  32          void delayShort();
+  33          void delayLong();
+  34          void Command(uchar com);
+  35          void showSingleChar(uchar ch);
+  36          void init();
+  37          void clear();
+  38          void setpositions();//cursor location
+  39          void timeacc();//seconds calculation by interrupt
+  40          
+  41          void main(){
+  42   1          //课设测试用例
+  43   1          //second=61,minute=61,hour=25,date=32,month=13,year=2021;     //2021-13-32 25:61:61
+  44   1          //second=55,minute=59,hour=23,date=29,month=2,year=2023;      //2023-02-29 23:59:55
+  45   1          second=55,minute=59,hour=23,date=29,month=2,year=2024;      //2024-02-29 23:59:55
+  46   1          //second=55,minute=59,hour=23,date=29,month=2,year=1900;      //1900-02-29 23:59:55
+  47   1          //second=55,minute=59,hour=23,date=29,month=2,year=2000;      //2000-02-29 23:59:55
+  48   1          init();
+  49   1          clear();
+  50   1          EA=1;
+  51   1          ET1=1;
+  52   1          TMOD=0X10;
+  53   1          TH1=0X3C;//(65536-50000)/256
+  54   1          TL1=0XB0;//(65536-50000)%256
+  55   1          TR1=1;
+C51 COMPILER V7.10   TS                                                                    01/06/2023 13:01:41 PAGE 2   
+
+  56   1          adjust_time();
+  57   1          adjust_date();
+  58   1          display_Date_Week();
+  59   1          while (1)
+  60   1          {
+  61   2            if(secjmpflag >= 20 && (K1 & K2 & K3  & K4)!=0 ){
+  62   3              secjmpflag -= 20; ++second;
+  63   3              adjust_time();//加秒进位
+  64   3              display_TIME();
+  65   3            }//不按键一直走
+  66   2            
+  67   2            if((hour|minute|second)==0x00)  display_Date_Week();//每天0点更新日期
+  68   2      
+  69   2            if(K3 == 0 ){
+  70   3              delayLong();//消颤
+  71   3              delayLong();
+  72   3              delayLong();
+  73   3              K3_flag = 1;
+  74   3              pressK3();
+  75   3            }//K3
+  76   2      
+  77   2            if(K4 == 0 ){
+  78   3              delayLong();//消颤
+  79   3              delayLong();
+  80   3              delayLong();
+  81   3              K4_flag = 1;
+  82   3              pressK4();
+  83   3            }//K4
+  84   2      
+  85   2          }
+  86   1      
+  87   1      } 
+  88          
+  89          void timeacc() interrupt 3{
+  90   1        TR1=0;
+  91   1        TH1=0X3C;//(65536-50000)/256
+  92   1        TL1=0XB0;//(65536-50000)%256
+  93   1        TR1=1;
+  94   1        ++secjmpflag;
+  95   1      }//计数
+  96          
+  97          void adjust_time(){
+  98   1        while(second >= 60){
+  99   2                second-=60;
+ 100   2                ++minute;
+ 101   2                  while(minute >= 60){
+ 102   3                minute -= 60;
+ 103   3                ++hour;
+ 104   3                      while(hour >= 24){
+ 105   4                    hour -= 24;
+ 106   4                    ++date;
+ 107   4                    adjust_date();
+ 108   4            }
+ 109   3          }
+ 110   2        }
+ 111   1      }
+ 112          
+ 113          void adjust_date(){
+ 114   1        if(year % 400==0 || (year % 4 == 0 && year % 100!=0)){
+ 115   2            while(date >  S_MonthVEC[month % 12]){
+ 116   3              date -= S_MonthVEC[month % 12];
+ 117   3              ++month;
+C51 COMPILER V7.10   TS                                                                    01/06/2023 13:01:41 PAGE 3   
+
+ 118   3                while (month > 12 )
+ 119   3                {
+ 120   4                  month -= 12;
+ 121   4                  ++year;
+ 122   4                }
+ 123   3          }
+ 124   2        }//闰年判断
+ 125   1        else{
+ 126   2          while(date >  MonthVEC[month% 12]){
+ 127   3              date -= MonthVEC[month% 12];
+ 128   3              ++month;
+ 129   3                while (month > 12 )
+ 130   3                {
+ 131   4                  month -= 12;
+ 132   4                  ++year;
+ 133   4                }
+ 134   3          }
+ 135   2        }//平年判断
+ 136   1      }//!!! month-1
+ 137          
+ 138          void display_TIME(){
+ 139   1        Command(0x80+0x40+1);//换行
+ 140   1        showSingleChar('0'+hour / 10);//H
+ 141   1        showSingleChar('0'+hour % 10);
+ 142   1        showSingleChar(':');
+ 143   1        showSingleChar('0'+minute / 10);//M
+ 144   1        showSingleChar('0'+minute % 10);
+ 145   1        showSingleChar(':');
+ 146   1        showSingleChar('0'+second / 10);//S
+ 147   1        showSingleChar('0'+second % 10);
+ 148   1      }
+ 149          
+ 150          void display_Date_Week(){
+ 151   1        //显示日期
+ 152   1        int temp,W,tempM,tempY;
+ 153   1        Command(0x80+1);//缩进
+ 154   1        //showSingleChar('0'+year/1000);//y
+ 155   1        showSingleChar('0'+year/1000);//y
+ 156   1              showSingleChar('0'+year/100%10);
+ 157   1              showSingleChar('0'+year/10%10);
+ 158   1              showSingleChar('0'+year%10);
+ 159   1        showSingleChar('-');
+ 160   1        showSingleChar('0'+month/10);//m
+ 161   1              showSingleChar('0'+month%10);
+ 162   1        showSingleChar('-');
+ 163   1        showSingleChar('0'+date/10);//d
+ 164   1              showSingleChar('0'+date%10);
+ 165   1        showSingleChar(' ');//缩进
+ 166   1        //星期判断***基姆拉尔森计算公式
+ 167   1      
+ 168   1        if (month < 3) {
+ 169   2              tempM = month + 12;
+ 170   2              tempY = year - 1;
+ 171   2        }
+ 172   1        else{
+ 173   2          tempM = month; tempY = year;
+ 174   2        }
+ 175   1        W = (date + 2 * tempM + 3 * (tempM +1) / 5 + tempY + tempY / 4 - tempY / 100 + tempY / 400 ) % 7; 
+ 176   1        for (temp = 0; temp < 3; temp++) showSingleChar((uchar)WeekMod[W][temp]);
+ 177   1        
+ 178   1      }
+ 179          
+C51 COMPILER V7.10   TS                                                                    01/06/2023 13:01:41 PAGE 4   
+
+ 180          void delayShort(){
+ 181   1                      uint n=2000;
+ 182   1                      while(n--);
+ 183   1      }
+ 184          
+ 185          void delayLong(){
+ 186   1                uint n=10000;
+ 187   1                      while(n--);
+ 188   1      }
+ 189          
+ 190          void Command(uchar com){
+ 191   1              P0=com;   //com为输入的命令码。通过P2送给LCD
+ 192   1              RS=0;      //RS=0 写命令
+ 193   1        RW=0;
+ 194   1              delayShort();     
+ 195   1              E=1;      //LCD的使能端E置高电平
+ 196   1              delayShort();
+ 197   1              E=0;       //LCD的使能端E置低电平
+ 198   1      }
+ 199          
+ 200          void showSingleChar(uchar ch){
+ 201   1        RS=1;
+ 202   1        RW=0;
+ 203   1        E=0;
+ 204   1        P0=ch;
+ 205   1        delayLong();
+ 206   1        E=1;
+ 207   1        E=0;
+ 208   1      }
+ 209          
+ 210          void init(){
+ 211   1              E=0;       
+ 212   1              Command(0x38);
+ 213   1        Command(0x0C);
+ 214   1              Command(0x06);
+ 215   1              Command(0x01);
+ 216   1              Command(0x80);
+ 217   1      }//1602 INIT
+ 218          
+ 219          void clear(){
+ 220   1        E=0;
+ 221   1              Command(0x01);
+ 222   1      }
+ 223          
+ 224          void setpositions(){
+ 225   1        Command(0x0F);
+ 226   1        Command(cur_location[set]);
+ 227   1      }//光标闪烁
+ 228          
+ 229          void pressK1(){
+ 230   1        ++set;
+ 231   1        if(set >= 6) set -= 6;
+ 232   1        setpositions();
+ 233   1        delayLong();
+ 234   1      }
+ 235          
+ 236          void pressK2(){
+ 237   1        switch (set)
+ 238   1        {
+ 239   2        case 0:
+ 240   2        ++year;
+ 241   2        display_TIME();
+C51 COMPILER V7.10   TS                                                                    01/06/2023 13:01:41 PAGE 5   
+
+ 242   2        display_Date_Week();
+ 243   2          break;
+ 244   2      
+ 245   2        case 1:
+ 246   2        ++month;
+ 247   2        if (month > 12) {
+ 248   3          month -= 12;
+ 249   3          ++year;
+ 250   3        }
+ 251   2        display_TIME();
+ 252   2        display_Date_Week();
+ 253   2          break;
+ 254   2      
+ 255   2        case 2:
+ 256   2        ++date;
+ 257   2        adjust_date();
+ 258   2        display_TIME();
+ 259   2        display_Date_Week();
+ 260   2          break;
+ 261   2      
+ 262   2        case 3:
+ 263   2        second += 3600;
+ 264   2        adjust_time();
+ 265   2        display_TIME();
+ 266   2        display_Date_Week();
+ 267   2          break;
+ 268   2      
+ 269   2        case 4:
+ 270   2        second += 60;
+ 271   2        adjust_time();
+ 272   2        display_TIME();
+ 273   2        display_Date_Week();
+ 274   2          break;
+ 275   2      
+ 276   2        case 5:
+ 277   2        ++second;
+ 278   2        adjust_time();
+ 279   2        display_TIME();
+ 280   2        display_Date_Week();
+ 281   2          break;
+ 282   2        
+ 283   2        default:
+ 284   2          break;
+ 285   2        }
+ 286   1      }//switch语句选择
+ 287          
+ 288          
+ 289          /*void pressK3(){
+ 290            uint temp = 0xff;
+ 291            while(--temp){
+ 292              //if(K3==0) break;
+ 293              if(K1 == 0) pressK1();
+ 294            }
+ 295            K3 = ~K3 ;
+ 296          }*/
+ 297          //uint max1 = 0xffff,max2 = 0xffff;
+ 298          
+ 299          void pressK3(){
+ 300   1        set = 0;
+ 301   1        setpositions();
+ 302   1        //秒针停止，光标闪烁                                                      
+ 303   1      
+C51 COMPILER V7.10   TS                                                                    01/06/2023 13:01:41 PAGE 6   
+
+ 304   1        while(1){
+ 305   2          delayLong();//不加就执行不下去 debug
+ 306   2          if(K3_flag != 0 ) K3_flag &= K3;
+ 307   2          //showSingleChar('0'+K3_flag);
+ 308   2      
+ 309   2          if(K3_flag == 0) {
+ 310   3            Command(0x0C);//与setpositions()相对，关闭光标
+ 311   3            display_Date_Week();
+ 312   3            display_TIME();
+ 313   3            break;
+ 314   3            }
+ 315   2            if(K1 == 0 ){
+ 316   3              delayLong();
+ 317   3              pressK1();
+ 318   3            }
+ 319   2            if(K2 == 0 ){
+ 320   3              delayLong();
+ 321   3              pressK2();
+ 322   3            }
+ 323   2        }
+ 324   1      
+ 325   1      }
+ 326          
+ 327          void pressK4(){                
+ 328   1        uint op=0;
+ 329   1        //uint a=2,b=4682;
+ 330   1        uint a=2586,b=4682;
+ 331   1        uchar store[3]={'&','|','^'};
+ 332   1        uint temp,result,bas;
+ 333   1        result = ((a & b | year) & (month & second ) & minute & (hour & date)); 
+ 334   1        clear();
+ 335   1        showSingleChar('0'+a/1000);
+ 336   1              showSingleChar('0'+a/100%10);
+ 337   1              showSingleChar('0'+a/10%10);
+ 338   1              showSingleChar('0'+a%10);
+ 339   1      
+ 340   1        showSingleChar('?');
+ 341   1      
+ 342   1        showSingleChar('0'+b/1000);
+ 343   1        showSingleChar('0'+b/100%10);
+ 344   1        showSingleChar('0'+b/10%10);
+ 345   1        showSingleChar('0'+b%10);
+ 346   1      
+ 347   1         while(1){
+ 348   2          delayLong();
+ 349   2          if(K4_flag != 0 ) K4_flag &= K4;
+ 350   2          if(K4_flag == 0) {
+ 351   3            Command(0x0C);
+ 352   3            clear();
+ 353   3            display_Date_Week();
+ 354   3            display_TIME();
+ 355   3            break;
+ 356   3            }
+ 357   2      
+ 358   2          if(K1 == 0 ){
+ 359   3            delayLong();
+ 360   3          Command(0x0F);
+ 361   3          Command(0x80+4);
+ 362   3          }
+ 363   2          if(K2 == 0 ){
+ 364   3              delayLong();
+ 365   3              ++op;
+C51 COMPILER V7.10   TS                                                                    01/06/2023 13:01:41 PAGE 7   
+
+ 366   3              while(op >2) op -=3;
+ 367   3            Command(0x0F);//显示操作
+ 368   3            Command(0x80+4);
+ 369   3            showSingleChar(store[op]);
+ 370   3            delayLong();
+ 371   3            Command(0x0C);//换行
+ 372   3            Command(0x80+0x40);
+ 373   3            switch (op)
+ 374   3            {
+ 375   4            case 0:result =a & b;//AND
+ 376   4              break;
+ 377   4            case 1:result =a | b;//OR
+ 378   4              break;
+ 379   4            case 2:result =a ^ b;//XOR
+ 380   4              break;
+ 381   4            default:
+ 382   4              break;
+ 383   4            }
+ 384   3      
+ 385   3            showSingleChar('0'+result/1000);//print result 
+ 386   3            showSingleChar('0'+result/100%10);
+ 387   3            showSingleChar('0'+result/10%10);
+ 388   3            showSingleChar('0'+result%10);
+ 389   3      
+ 390   3            }
+ 391   2      
+ 392   2            }
+ 393   1        }
+*** WARNING C280 IN LINE 332 OF TS.C: 'temp': unreferenced local variable
+*** WARNING C280 IN LINE 332 OF TS.C: 'bas': unreferenced local variable
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   1687    ----
+   CONSTANT SIZE    =     24    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     77      23
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  2 WARNING(S),  0 ERROR(S)
